@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="
+        default-src 'self';
+        connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://ipapi.co;
+        img-src *;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+        font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
+        script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.livechatinc.com https://api.livechatinc.com https://apis.google.com;
+        frame-src 'self' https://cloud-casino-34cc6.firebaseapp.com https://accounts.google.com https://apis.google.com https://secure.livechatinc.com;
+      "
+        />
+
+        <meta http-equiv="Referrer-Policy" content="no-referrer" />
+
+        <title>CLOUD CASINO</title>
+
+        <!-- 폰트 및 아이콘 -->
+        <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet" />
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+        <link href="styles.css" rel="stylesheet" />
+
+        <!-- Firebase SDK -->
+        <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+
+        <!-- 메인 JS -->
+        <script src="index.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+    </head>
+    <body>
+        <!-- Aurora 배경 필름 -->
+        <canvas id="bgAurora" width="380" height="811"></canvas>
+
+        <!-- 떠다니는 입자 -->
+        <div class="particles" id="particles"></div>
+
+        <!-- 로딩 스피너 -->
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner"></div>
+        </div>
+
+        <!-- 메인 페이지 컨테이너 -->
+        <div id="mainContainer">
+            <!-- 헤더 -->
+            <header class="header">
+                <div class="header-inner">
+                    <h1>CLOUD CASINO</h1>
+                    <div class="auth-buttons">
+                        <button class="auth-btn" id="loginBtn">로그인</button>
+                        <button class="auth-btn" id="registerBtn">회원가입</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 배너 -->
+            <div class="banner-container">
+                <div class="banner">
+                    <img src="https://i.ibb.co/qYqFdHhG/6073574023222119623-cropped-1.jpg" alt="구름 카지노" class="active" />
+                    <img src="https://i.ibb.co/V04VMkCM/IMG-6293.jpg" alt="만능 콤프 배너" />
+                    <div class="banner-controls">
+                        <button class="banner-arrow" id="prevBanner">‹</button>
+                        <button class="banner-arrow" id="nextBanner">›</button>
+                    </div>
+                    <div class="banner-indicators"></div>
+                </div>
+            </div>
+
+            <!-- 게임 탭 -->
+            <div class="game-tabs">
+                <div class="game-tab active" data-tab="casino"><i class="fas fa-dice"></i><span>카지노</span></div>
+                <div class="game-tab" data-tab="minigame"><i class="fas fa-coins"></i><span>슬롯</span></div>
+            </div>
+
+            <!-- 카지노 게임 카드 -->
+            <div class="game-cards" id="casinoTab">
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/602n3FR2/IMG-6043.png" alt="에볼루션" />
+                    <div class="card-title">에볼루션 카지노</div>
+                </div>
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/HT9gG1CP/IMG-6045.png" alt="드림게임" />
+                    <div class="card-title">드림게임</div>
+                </div>
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/YFFhrgH9/IMG-6046.png" alt="WM 카지노" />
+                    <div class="card-title">WM 카지노</div>
+                </div>
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/Y4BwZx1B/IMG-6047.png" alt="AG 카지노" />
+                    <div class="card-title">AG 카지노</div>
+                </div>
+            </div>
+
+            <!-- 미니게임 카드 (슬롯) -->
+            <div class="game-cards" id="minigameTab" style="display: none;">
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/0VZvnrRq/IMG-6277.png" alt="다이스 게임" />
+                    <div class="card-title">시큐9</div>
+                </div>
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/SXRJJmdb/IMG-6044.png" alt="룰렛" />
+                    <div class="card-title">프라그마틱 슬롯</div>
+                </div>
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/fd2cQp7X/IMG-6124.png" alt="키노" />
+                    <div class="card-title">프라그마틱 슬롯2</div>
+                </div>
+                <div class="game-card" onclick="showUnderMaintenance()">
+                    <img src="https://i.ibb.co/jPcPJWCB/IMG-6278.png" alt="빙고" />
+                    <div class="card-title">부운고</div>
+                </div>
+            </div>
+
+            <!-- 푸터 -->
+            <footer>
+                <p>© 2025 CLOUD CASINO. All rights reserved.</p>
+                <a href="https://t.me/cloud24cs" class="telegram-link" target="_blank"> <i class="fab fa-telegram telegram-icon"></i>텔레그램 문의 </a>
+            </footer>
+
+            <!-- 네비게이션 바 -->
+            <div class="nav-bar">
+                <div class="nav-item" id="chargeBtn">
+                    <i class="fas fa-won-sign"></i>
+                    <span class="nav-text">충전</span>
+                </div>
+                <div class="nav-item" id="exchangeBtn">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span class="nav-text">환전</span>
+                </div>
+                <div class="nav-item active" id="homeBtn">
+                    <i class="fas fa-home"></i>
+                    <span class="nav-text">홈</span>
+                </div>
+                <div class="nav-item" id="eventBtn">
+                    <i class="fas fa-gift"></i>
+                    <span class="nav-text">이벤트</span>
+                </div>
+                <div class="nav-item" id="csBtn">
+                    <i class="fas fa-headset"></i>
+                    <span class="nav-text">고객센터</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 관리자 페이지 컨테이너 -->
+        <div class="admin-container" id="adminContainer">
+            <div class="admin-header">
+                <h2 class="admin-title">CLOUD CASINO 관리자페이지 v2</h2>
+                <button class="admin-back-btn" id="adminBackBtn"><i class="fas fa-arrow-left"></i> 메인으로</button>
+            </div>
+
+            <!-- 관리자 통계 -->
+            <div class="admin-stats">
+                <div class="stat-card">
+                    <div class="stat-title">총 회원 수</div>
+                    <div class="stat-value" id="totalUsers">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">오늘 가입</div>
+                    <div class="stat-value" id="todayUsers">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">활성 회원</div>
+                    <div class="stat-value" id="activeUsers">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">정지 회원</div>
+                    <div class="stat-value" id="bannedUsers">0</div>
+                </div>
+            </div>
+
+            <!-- 관리자 탭 -->
+            <div class="admin-tabs">
+                <div class="admin-tab active" data-tab="users">회원 관리</div>
+                <div class="admin-tab" data-tab="charges">충전 관리</div>
+                <div class="admin-tab" data-tab="exchanges">환전 관리</div>
+                <div class="admin-tab" data-tab="approvals">가입 승인</div>
+                <div class="admin-tab" data-tab="chats">채팅 관리</div>
+                <div class="admin-tab" data-tab="account">입금 계좌</div>
+            </div>
+
+            <!-- 회원 관리 탭 -->
+            <div id="usersTab" class="tab-content active">
+                <div class="search-box">
+                    <input type="text" id="userSearch" class="form-control" placeholder="회원 검색 (이름 또는 아이디)" />
+                </div>
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>이름</th>
+                            <th>아이디</th>
+                            <th>IP</th>
+                            <th>보유금액</th>
+                            <th>보유포인트</th>
+                            <th>가입일</th>
+                            <th>상태</th>
+                            <th>액션</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- 충전 관리 탭 -->
+            <div id="chargesTab" class="tab-content">
+                <div class="admin-section">
+                    <h3>충전 신청 목록</h3>
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>아이디</th>
+                                <th>금액</th>
+                                <th>신청일</th>
+                                <th>포인트 옵션</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chargeRequestsBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center;">처리할 충전 신청이 없습니다</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 환전 관리 탭 -->
+            <div id="exchangesTab" class="tab-content">
+                <div class="admin-section">
+                    <h3>환전 신청 목록</h3>
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>아이디</th>
+                                <th>금액</th>
+                                <th>은행</th>
+                                <th>계좌번호</th>
+                                <th>예금주</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody id="exchangeRequestsBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center;">처리할 환전 신청이 없습니다</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 가입 승인 탭 -->
+            <div id="approvalsTab" class="tab-content">
+                <div class="admin-section">
+                    <h3>가입 승인 대기 목록</h3>
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>이름</th>
+                                <th>아이디</th>
+                                <th>가입일</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingApprovalTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 채팅 관리 탭 -->
+            <div id="chatsTab" class="tab-content">
+                <div class="admin-section">
+                    <h3>1:1 채팅 관리</h3>
+                    <div class="chat-list" id="adminChatList"></div>
+                    <div id="adminChatContainer" class="admin-chat-container" style="display: none;">
+                        <div class="admin-chat-header">
+                            <div class="admin-chat-user"></div>
+                            <button class="admin-close-chat" id="adminCloseChat">닫기</button>
+                        </div>
+                        <div class="chat-container">
+                            <div class="chat-messages" id="adminChatMessages"></div>
+                            <div class="chat-input-area">
+                                <textarea id="adminChatInput" class="form-control" rows="3"></textarea>
+                                <button id="adminSendMessageBtn" class="btn">전송</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 입금 계좌 설정 탭 -->
+            <div id="accountTab" class="tab-content">
+                <div class="admin-section">
+                    <h3>입금 계좌 설정</h3>
+                    <div class="form-group">
+                        <label>은행</label>
+                        <input id="depBank" class="form-control" placeholder="예: 농협" />
+                    </div>
+                    <div class="form-group">
+                        <label>계좌번호</label>
+                        <input id="depNumber" class="form-control" placeholder="예: 352-837-294**" />
+                    </div>
+                    <div class="form-group">
+                        <label>예금주</label>
+                        <input id="depHolder" class="form-control" placeholder="예: 구름몰" />
+                    </div>
+                    <button id="saveDepositAccountBtn" class="btn">저장</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로그인 모달 -->
+        <div class="modal" id="loginModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">로그인</h3>
+                    <button class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="loginId">아이디</label>
+                        <input type="text" id="loginId" class="form-control" placeholder="아이디를 입력하세요" />
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">비밀번호</label>
+                        <input type="password" id="loginPassword" class="form-control" placeholder="비밀번호를 입력하세요" />
+                    </div>
+                    <button class="btn" id="loginSubmit">로그인</button>
+                    <div style="text-align: center; margin-top: 15px;">
+                        <a href="#" style="color: var(--neon-blue); text-decoration: none;">비밀번호 찾기</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 회원가입 모달 -->
+        <div class="modal" id="registerModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">회원가입</h3>
+                    <button class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="regName">이름</label>
+                        <input type="text" id="regName" class="form-control" placeholder="실명을 입력하세요" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regId">아이디</label>
+                        <input type="text" id="regId" class="form-control" placeholder="사용할 아이디를 입력하세요" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">비밀번호</label>
+                        <input type="password" id="regPassword" class="form-control" placeholder="비밀번호를 입력하세요 (6자 이상)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regPasswordConfirm">비밀번호 확인</label>
+                        <input type="password" id="regPasswordConfirm" class="form-control" placeholder="비밀번호를 다시 입력하세요" />
+                    </div>
+                    <div class="form-group">
+                        <label for="withdrawPassword">출금 비밀번호</label>
+                        <input type="password" id="withdrawPassword" class="form-control" placeholder="출금시 사용할 비밀번호를 입력하세요" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regBank">은행 선택</label>
+                        <select id="regBank" class="form-control">
+                            <option value="">은행을 선택하세요</option>
+                            <option value="nh">농협</option>
+                            <option value="kb">국민은행</option>
+                            <option value="sh">신한은행</option>
+                            <option value="wr">우리은행</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="regAccount">계좌번호</label>
+                        <input type="text" id="regAccount" class="form-control" placeholder="계좌번호를 입력하세요 ('-' 제외)" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regAccountName">예금주</label>
+                        <input type="text" id="regAccountName" class="form-control" placeholder="예금주명을 입력하세요" />
+                    </div>
+                    <button class="btn" id="registerSubmit">회원가입 완료</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 충전 모달 -->
+        <div class="modal" id="chargeModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">충전하기</h3>
+                    <button class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="charge-tabs">
+                        <div class="charge-tab active" data-tab="request">충전신청</div>
+                        <div class="charge-tab" data-tab="history">신청내역</div>
+                    </div>
+
+                    <!-- 충전 신청 탭 -->
+                    <div id="chargeRequestTab" class="charge-tab-content active">
+                        <div class="notice-box">
+                            <p class="warning-text">※ 입금순서</p>
+                            <p>계좌확인 &gt; 입금 &gt; 입금신청 순으로 해주시면 가장 신속하게 처리됩니다</p>
+                            <p>(순서를 지키지 않으시면 입금처리되지 않습니다)</p>
+                            <p style="margin-top: 15px;">
+                                ※ 충전은 만원 단위만 가능하시며, 만원 단위 입금 시 반드시 입금 확인증을 텔레그램으로 제출하셔야 처리 가능합니다.
+                            </p>
+                            <p style="margin-top: 15px;" class="warning-text">※ 허위충전 시 경고없이 제재 됩니다.</p>
+                            <p style="margin-top: 15px;">
+                                ※ 입금신청 후 최대 5분 이내 입금이 완료되지 않을 경우 자동 취소되며, 반복적인 허위 입금 신청 시 경고 없이 모든 이벤트 참여 자격 박탈됩니다.
+                            </p>
+                            <p style="margin-top: 15px;">※ 회원가입 시 기재된 본인 명의 계좌만 입금이 가능합니다.</p>
+                            <p style="margin-top: 15px;">※ 최소 충전 금액은 10,000원 입니다.</p>
+                        </div>
+
+                        <div class="account-info" style="flex-direction: column;">
+                            <!-- 비번 인증 전: -->
+                            <div id="account-protect-cover" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <span id="accountResult">계좌확인을 위해 비밀번호를 입력해주세요</span>
+                                <button class="auth-btn" id="verifyAccountBtn">계좌확인</button>
+                            </div>
+                            <!-- 비번 입력란 (초기엔 숨김) -->
+                            <div id="accountPwWrap" style="margin-top: 10px; display: none; width: 100%;">
+                                <input type="password" id="accountCheckPassword" class="form-control" placeholder="회원가입 시 비밀번호 입력" style="margin-bottom: 6px;" />
+                                <button class="btn" id="accountPwConfirmBtn" style="margin-top: 0;">확인</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>계좌확인</label>
+                            <div class="radio-option">
+                                <input type="radio" name="pointOption" id="option1" />
+                                <label for="option1">카지노 - 롤링 100% (카지노 이용 시 당일 페이백 참여 불가)</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" name="pointOption" id="option2" />
+                                <label for="option2">슬롯 - 첫충전 10% 매충전 5% 자동 지급 / 롤링 200%</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" name="pointOption" id="option3" />
+                                <label for="option3">받지않음 - 포인트 미지급 롤링 100%</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>충전금액 선택</label>
+                            <div class="amount-grid">
+                                <button class="amount-btn">1만원</button>
+                                <button class="amount-btn">3만원</button>
+                                <button class="amount-btn">5만원</button>
+                                <button class="amount-btn">10만원</button>
+                                <button class="amount-btn">20만원</button>
+                                <button class="amount-btn">30만원</button>
+                                <button class="amount-btn">50만원</button>
+                                <button class="amount-btn">100만원</button>
+                                <button class="amount-btn">500만원</button>
+                                <button class="amount-btn">1000만원</button>
+                            </div>
+                            <input type="text" id="customChargeAmount" class="form-control amount-input" placeholder="직접 금액 입력 (최소 10,000원)" />
+                        </div>
+
+                        <button class="btn" id="submitChargeBtn">충전신청</button>
+                    </div>
+
+                    <!-- 충전 신청 내역 탭 -->
+                    <div id="chargeHistoryTab" class="charge-tab-content">
+                        <div class="charge-history-header">
+                            <span>날짜</span>
+                            <span>금액</span>
+                            <span>상태</span>
+                        </div>
+                        <div class="charge-history-list" id="chargeHistoryList">
+                            <div class="no-history">충전 내역이 없습니다.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 환전 모달 -->
+        <div class="modal" id="exchangeModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">환전하기</h3>
+                    <button class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="exchange-tabs">
+                        <div class="exchange-tab active" data-tab="request">환전신청</div>
+                        <div class="exchange-tab" data-tab="history">신청내역</div>
+                    </div>
+
+                    <!-- 환전 신청 탭 -->
+                    <div id="exchangeRequestTab" class="exchange-tab-content active">
+                        <div class="form-group">
+                            <label>현재 보유금액</label>
+                            <div id="currentBalance" style="color: var(--neon-blue); font-weight: bold;">0 원</div>
+                        </div>
+
+                        <div class="notice-box">
+                            <p class="warning-text">※ 출금규정</p>
+                            <p>※ 1회 최소 환전금액: 10,000원 / 1회 최대 환전금액: 무제한</p>
+                            <p>※ 모든 환전은 순차적으로 진행되며, 대기 인원이 많을 경우 최대 30분 소요될 수 있습니다.</p>
+                            <p>※ 회원가입 시 등록된 본인 명의 계좌만 출금 가능합니다.</p>
+                            <p>※ 잔액 출금 후에만 환전 신청이 가능합니다.</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label>환전금액 선택</label>
+                            <div class="amount-grid">
+                                <button class="amount-btn">1만원</button>
+                                <button class="amount-btn">3만원</button>
+                                <button class="amount-btn">5만원</button>
+                                <button class="amount-btn">10만원</button>
+                                <button class="amount-btn">50만원</button>
+                                <button class="amount-btn">100만원</button>
+                                <button class="amount-btn">500만원</button>
+                                <button class="amount-btn">1000만원</button>
+                            </div>
+                            <input type="text" id="customExchangeAmount" class="form-control amount-input" placeholder="직접 금액 입력 (최소 10,000원)" />
+                            <p style="margin-top: 10px; color: var(--text-gray); font-size: 14px;">
+                                최소 10,000원 이상, 10,000원 단위로 환전 가능합니다.
+                            </p>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exchangeBank">거래은행</label>
+                            <select id="exchangeBank" class="form-control">
+                                <option value="">은행을 선택하세요</option>
+                                <option value="nh">농협</option>
+                                <option value="kb">국민은행</option>
+                                <option value="sh">신한은행</option>
+                                <option value="wr">우리은행</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exchangeAccount">계좌번호</label>
+                            <input type="text" id="exchangeAccount" class="form-control" placeholder="계좌번호를 입력하세요 ('-' 제외)" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exchangeAccountName">예금주</label>
+                            <input type="text" id="exchangeAccountName" class="form-control" placeholder="예금주명을 입력하세요" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exchangePassword">출금 비밀번호</label>
+                            <input type="password" id="exchangePassword" class="form-control" placeholder="출금 비밀번호를 입력하세요" />
+                        </div>
+
+                        <button class="btn" id="submitExchangeBtn">환전신청</button>
+                    </div>
+
+                    <!-- 환전 신청 내역 탭 -->
+                    <div id="exchangeHistoryTab" class="exchange-tab-content">
+                        <div class="exchange-history-header">
+                            <span>날짜</span>
+                            <span>금액</span>
+                            <span>상태</span>
+                        </div>
+                        <div class="exchange-history-list" id="exchangeHistoryList">
+                            <div class="no-history">환전 내역이 없습니다.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 고객센터 채팅 모달 -->
+        <div class="modal" id="csModal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">고객센터 1:1 상담</h3>
+                    <button class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="chat-container" id="chatContainer">
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="no-chat">상담원과 연결 중입니다...</div>
+                        </div>
+                        <div class="chat-input-area">
+                            <textarea id="chatInput" placeholder="메시지를 입력하세요..." class="form-control" rows="3"></textarea>
+                            <button id="sendMessageBtn" class="btn" style="margin-top: 10px;">전송</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 회원 정보 모달 -->
+        <div class="modal" id="userInfoModal">
+            <div class="modal-content" style="max-width: 480px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">회원 정보</h3>
+                    <button class="close-btn" onclick="closeModal('userInfoModal')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="user-info-wrapper">
+                        <img id="infoAvatar" class="info-avatar" src="https://postimg.cc/XZxZ0N3b" alt="avatar" />
+                        <dl class="user-info-grid">
+                            <dt>이름</dt>
+                            <dd id="infoName"></dd>
+                            <dt>아이디</dt>
+                            <dd id="infoUserId"></dd>
+                            <dt>가입일</dt>
+                            <dd id="infoJoinDate"></dd>
+                            <dt>상태</dt>
+                            <dd><span id="infoStatus" class="status-badge"></span></dd>
+                            <dt>보유금액</dt>
+                            <dd id="infoBalance"></dd>
+                            <dt>포인트</dt>
+                            <dd id="infoPoint"></dd>
+                            <dt>IP 주소</dt>
+                            <dd id="infoIpAddress"></dd>
+                            <dt>VPN 사용</dt>
+                            <dd id="infoVpnStatus"></dd>
+                            <dt>은행</dt>
+                            <dd id="infoBank"></dd>
+                            <dt>계좌번호</dt>
+                            <dd id="infoAccount"></dd>
+                            <dt>예금주</dt>
+                            <dd id="infoAccountName"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 테더 충전 팝업 -->
+        <div id="tetherPopup" class="popup">
+            <div class="popup__inner">
+                <header class="popup__header">
+                    <h1 class="popup__title">CLOUD CASINO</h1>
+                    <button class="popup__close" onclick="closePopup()">✕</button>
+                </header>
+                <div class="popup__content">
+                    <img src="https://i.ibb.co/rKtvvcRD/6075767806617567488.jpg" alt="Tether Coin" class="popup__image" />
+                </div>
+                <footer class="popup__footer">
+                    <label class="popup__today">
+                        <input type="checkbox" id="dontShowToday" />
+                        오늘 하루 보지 않기
+                    </label>
+                </footer>
+            </div>
+        </div>
+
+        <!-- LiveChat 코드 -->
+        <script>
+            window.__lc = window.__lc || {};
+            window.__lc.license = 19254040;
+            window.__lc.integration_name = "manual_onboarding";
+            window.__lc.product_name = "livechat";
+            (function (n, t, c) {
+                function i(n) {
+                    return e._h ? e._h.apply(null, n) : e._q.push(n);
+                }
+                var e = {
+                    _q: [],
+                    _h: null,
+                    _v: "2.0",
+                    on: function () {
+                        i(["on", c.call(arguments)]);
+                    },
+                    once: function () {
+                        i(["once", c.call(arguments)]);
+                    },
+                    off: function () {
+                        i(["off", c.call(arguments)]);
+                    },
+                    get: function () {
+                        if (!e._h) throw new Error("[LiveChatWidget] You can't use getters before load.");
+                        return i(["get", c.call(arguments)]);
+                    },
+                    call: function () {
+                        i(["call", c.call(arguments)]);
+                    },
+                    init: function () {
+                        var n = t.createElement("script");
+                        n.async = !0;
+                        n.type = "text/javascript";
+                        n.src = "https://cdn.livechatinc.com/tracking.js";
+                        t.head.appendChild(n);
+                    },
+                };
+                if (!n.__lc.asyncInit) e.init();
+                n.LiveChatWidget = n.LiveChatWidget || e;
+            })(window, document, [].slice);
+        </script>
+        <noscript>
+            <a href="https://www.livechat.com/chat-with/19254040/" rel="nofollow">Chat with us</a>, powered by
+            <a href="https://www.livechat.com/?welcome" rel="noopener nofollow" target="_blank">LiveChat</a>
+        </noscript>
+        <!-- End of LiveChat code -->
+        <!--새버젼 v1-->
+    </body>
+</html>
