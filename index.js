@@ -1937,6 +1937,39 @@ async function checkWithdrawPassword(inputPassword) {
     return true;
 }
 
+function showApprovalPendingPopup(message) {
+    // 기존 팝업 제거
+    const existingPopup = document.getElementById("approvalPendingPopup");
+    if (existingPopup) {
+        document.body.removeChild(existingPopup);
+    }
+
+    // 새 팝업 생성
+    const popup = document.createElement("div");
+    popup.id = "approvalPendingPopup";
+    popup.className = "approval-pending-popup-overlay";
+    popup.innerHTML = `
+        <div class="approval-pending-popup-box">
+            <div class="approval-pending-popup-header">
+                <i class="fas fa-clock approval-pending-icon"></i>
+            </div>
+            <div class="approval-pending-popup-body">
+                <p>${message}</p>
+                <button id="closeApprovalPendingPopup" class="approval-pending-close-btn">확인</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(popup);
+
+    // 이벤트 리스너
+    document.getElementById("closeApprovalPendingPopup").addEventListener("click", () => {
+        popup.classList.add("approval-pending-popup-hide");
+        setTimeout(() => {
+            document.body.removeChild(popup);
+        }, 250);
+    });
+}
+
 // 1) setupRegister(): 회원가입 시점에 IP 조회 → VPN 검사 → Firestore에 저장
 function setupRegister() {
     document.getElementById("registerSubmit").addEventListener("click", async function () {
@@ -2010,20 +2043,43 @@ function setupRegister() {
             };
             await db.collection("users").doc(userCredential.user.uid).set(userData);
 
-            // 3) 로그아웃 처리 (꼭 Firestore 저장 이후에!)
+            // ===== [추가] 가입승인 요청 approvalRequests 컬렉션에 생성 =====
+            await db.collection("approvalRequests").add({
+                userId: userCredential.user.uid,
+                status: "pending",
+                requestDate: new Date().toISOString(),
+                userInfo: {
+                    name,
+                    userId,
+                    joinDate: userData.joinDate,
+                    bank,
+                    account,
+                    accountName,
+                },
+            });
+            // =======================================================
+
+            // 3) 로그아웃 처리 (Firestore 저장 이후에 수행)
             await auth.signOut();
 
-            // 4) UI/상태 리셋 (메인화면, 비로그인 UI로)
+            // 4) UI 상태 업데이트 및 페이지 리셋
             updateAuthUI(null);
             showMainPage();
             closeModal("registerModal");
 
-            // 5) 승인대기 안내 (팝업)
-            showBlockedPopup("회원가입 신청이 완료되었습니다.<br>관리자 승인 후 로그인이 가능합니다.");
-
+            // 5) 승인대기 안내 팝업 표시
+            showApprovalPendingPopup("회원가입 신청이 완료되었습니다.<br>관리자 승인 후 로그인이 가능합니다.");
         } catch (error) {
             console.error("회원가입 오류:", error);
             alert("회원가입 중 오류가 발생했습니다: " + error.message);
+
+            // 오류 발생 시에도 로그아웃 상태 유지
+            try {
+                await auth.signOut();
+                updateAuthUI(null);
+            } catch (logoutError) {
+                console.error("로그아웃 오류:", logoutError);
+            }
         } finally {
             hideLoading();
         }
