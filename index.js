@@ -110,10 +110,6 @@ function closeModal(modalId) {
     document.getElementById(modalId).style.display = "none";
     document.body.style.overflow = "auto";
 
-    // 고객센터 모달 닫힐 때 채팅 구독 해제 (생략)
-    // ...중략...
-
-    // 🔥 충전모달 닫힐 때 계좌 안내와 인증상태 초기화
     if (modalId === "chargeModal") {
         const accountResult = document.getElementById("accountResult");
         const pwWrap = document.getElementById("accountPwWrap");
@@ -164,8 +160,10 @@ function loadDepositAccount() {
         .onSnapshot((doc) => {
             if (!doc.exists) return;
             const { bank, accountNumber, holder } = doc.data();
+            // 계좌 정보를 전역 변수에만 저장
             currentDepositAccount = `${bank} ${accountNumber} / 예금주: ${holder}`;
-            // accountResult에는 초기에는 아무것도 넣지 않음!
+            // 화면에 노출하지 않음!
+            // accountResult.textContent = currentDepositAccount;  <-- 이 줄 삭제!
         });
 }
 
@@ -245,64 +243,53 @@ function setupChargeTabs() {
 }
 
 function setupChargeSubmit() {
-    const chargeModal = document.getElementById("chargeModal");
-    if (!chargeModal) return;
+    const submitBtn = document.getElementById("submitChargeBtn");
+    if (!submitBtn) return;
 
-    // 모달이 열릴 때 한 번씩만 실행
-    chargeModal.addEventListener("shown", () => {
-        const submitBtn = document.getElementById("submitChargeBtn");
-        if (!submitBtn) return;
+    submitBtn.addEventListener("click", async () => {
+        const amountInput = document.getElementById("customChargeAmount");
+        const activeBtn = document.querySelector(".amount-btn.active");
+        const pointOptionEl = document.querySelector('input[name="pointOption"]:checked');
 
-        // ✔ once:true ⇒ 리스너는 클릭 후 자동 해제돼 중복 전송을 막습니다
-        submitBtn.addEventListener(
-            "click",
-            async () => {
-                /* (기존 로직 그대로) */
-                const amountInput = document.getElementById("customChargeAmount");
-                const activeBtn = document.querySelector(".amount-btn.active");
-                const pointOptionEl = document.querySelector('input[name="pointOption"]:checked');
+        const rawAmount = (amountInput?.value || activeBtn?.textContent || "").replace(/[^0-9]/g, "");
+        const amount = parseInt(rawAmount, 10);
+        if (!amount || isNaN(amount) || amount < 10000) {
+            return alert("최소 10,000원 이상 입력해주세요");
+        }
+        if (!pointOptionEl) {
+            return alert("포인트 옵션을 선택해주세요");
+        }
 
-                const rawAmount = (amountInput?.value || activeBtn?.textContent || "").replace(/[^0-9]/g, "");
-                const amount = parseInt(rawAmount, 10);
-                if (!amount || isNaN(amount) || amount < 10000) {
-                    return alert("최소 10,000원 이상 입력해주세요");
-                }
-                if (!pointOptionEl) {
-                    return alert("포인트 옵션을 선택해주세요");
-                }
+        try {
+            showLoading();
+            const user = auth.currentUser;
+            if (!user) throw new Error("로그인이 필요합니다");
 
-                try {
-                    showLoading();
-                    const user = auth.currentUser;
-                    if (!user) throw new Error("로그인이 필요합니다");
+            const userDoc = await db.collection("users").doc(user.uid).get();
+            if (!userDoc.exists) throw new Error("사용자 정보를 찾을 수 없습니다");
 
-                    const userDoc = await db.collection("users").doc(user.uid).get();
-                    if (!userDoc.exists) throw new Error("사용자 정보를 찾을 수 없습니다");
+            // 출금 비밀번호 확인은 여기선 생략하거나 추가 구현
 
-                    await db.collection("chargeRequests").add({
-                        userId: user.uid,
-                        userName: userDoc.data().name || user.email,
-                        amount,
-                        date: new Date().toISOString(),
-                        status: "pending",
-                        pointOption: pointOptionEl.id,
-                        adminNote: "",
-                        userBank: userDoc.data().bank,
-                        userAccount: userDoc.data().account,
-                    });
+            await db.collection("chargeRequests").add({
+                userId: user.uid,
+                userName: userDoc.data().name || user.email,
+                amount,
+                date: new Date().toISOString(),
+                status: "pending",
+                pointOption: pointOptionEl.id,
+                adminNote: "",
+                userBank: userDoc.data().bank,
+                userAccount: userDoc.data().account,
+            });
 
-                    showChargeSuccessNotification(amount);
-                    resetChargeForm();
-                    loadChargeHistory();
-                } catch (err) {
-                    console.error("충전 신청 오류:", err);
-                    alert("충전 신청 중 오류가 발생했습니다: " + err.message);
-                } finally {
-                    hideLoading();
-                }
-            },
-            { once: true } // 🔑 중복 방지 핵심 옵션
-        );
+            alert(amount.toLocaleString() + "원 충전 신청 완료!");
+            // 폼 초기화, 충전 내역 갱신 등 호출 가능
+        } catch (err) {
+            console.error("충전 신청 오류:", err);
+            alert("충전 신청 중 오류가 발생했습니다: " + err.message);
+        } finally {
+            hideLoading();
+        }
     });
 }
 
@@ -583,7 +570,7 @@ function setupAccountVerification() {
         pwInput.focus();
     });
 
-    // ⭐ 여기서부터가 핵심! (로그인 비밀번호로 인증)
+    // ★ 여기서 인증 성공해야 계좌 정보 노출!
     document.getElementById("accountPwConfirmBtn").addEventListener("click", async () => {
         const password = pwInput.value.trim();
         if (!password) return alert("비밀번호를 입력하세요");
@@ -594,11 +581,8 @@ function setupAccountVerification() {
             return;
         }
         try {
-            // **firebase 비밀번호 재인증**
-            const credential = firebase.auth.EmailAuthProvider.credential(
-                user.email, // 가입시 아이디@yourdomain.com 형태
-                password // 입력받은 비밀번호
-            );
+            // firebase 비밀번호 재인증
+            const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
             await user.reauthenticateWithCredential(credential);
 
             // 인증 성공 → 계좌 정보 노출
@@ -863,21 +847,6 @@ async function getClientIp() {
         return "알 수 없음";
     }
 }
-
-// 회원가입 시
-document.getElementById("registerSubmit").addEventListener("click", async function () {
-    // ... (기존 회원가입 입력값 처리)
-    // 1) IP 먼저 가져오기
-    const ipAddress = await getClientIp();
-
-    // 2) 가입시 Firestore에 IP도 함께 저장
-    const userData = {
-        // ...기존 필드
-        ipAddress: ipAddress,
-    };
-    await db.collection("users").doc(userCredential.user.uid).set(userData);
-    // ...
-});
 
 async function blockUserIp(userId, ipAddress) {
     if (!ipAddress || ipAddress === "알 수 없음") {
@@ -1159,7 +1128,8 @@ async function rejectChargeRequest(e) {
 }
 
 async function updateUserBalance(userId, value, type = "balance") {
-    if (isNaN(value) || value < 0) {
+    const numValue = Number(value);
+    if (isNaN(numValue) || numValue < 0) {
         alert("유효한 금액을 입력해주세요.");
         return;
     }
@@ -1170,7 +1140,7 @@ async function updateUserBalance(userId, value, type = "balance") {
             .collection("users")
             .doc(userId)
             .update({
-                [type]: Number(value),
+                [type]: numValue,
             });
         console.log(`${type} 업데이트 성공`);
     } catch (error) {
@@ -1559,9 +1529,12 @@ async function resetPassword(userId) {
     if (confirm(`정말로 ${userId}의 비밀번호를 초기화하시겠습니까?`)) {
         showLoading();
         try {
-            // Firebase 인증을 통해 비밀번호 재설정 이메일 보내기
-            const user = await auth.getUserByEmail(userId + "@yourdomain.com");
-            await auth.sendPasswordResetEmail(user.email);
+            // userId는 로그인 ID, 이메일 주소 형태로 만듦
+            const email = userId + "@yourdomain.com";
+
+            // Firebase 클라이언트 SDK 함수로 바로 비밀번호 재설정 이메일 전송
+            await auth.sendPasswordResetEmail(email);
+
             alert("비밀번호 재설정 이메일이 전송되었습니다.");
         } catch (error) {
             console.error("비밀번호 초기화 중 오류:", error);
@@ -1980,8 +1953,12 @@ async function checkWithdrawPassword(inputPassword) {
 
 // 1) setupRegister(): 회원가입 시점에 IP 조회 → VPN 검사 → Firestore에 저장
 function setupRegister() {
-    // 회원가입 함수 예시 (생략 없이)
+    // 회원가입 버튼 클릭 이벤트 등록
     document.getElementById("registerSubmit").addEventListener("click", async function () {
+        // 디버깅용 로그
+        console.log("회원가입 버튼 클릭 시점 bcrypt 객체:", bcrypt);
+        console.log("bcrypt.hashSync 타입:", typeof bcrypt?.hashSync);
+
         // 입력값 받기
         const userId = document.getElementById("regId").value.trim();
         const password = document.getElementById("regPassword").value.trim();
@@ -1992,28 +1969,63 @@ function setupRegister() {
         const accountName = document.getElementById("regAccountName").value.trim();
         const withdrawPassword = document.getElementById("withdrawPassword").value.trim();
 
+        // 비밀번호 유효성 검사 함수
+        function isValidPassword(pw) {
+            const minLength = 8;
+            // 예: 대문자 또는 특수문자 중 하나만 있어도 통과
+            const hasUpperCase = /[A-Z]/.test(pw);
+            const hasSpecialChar = /[^A-Za-z0-9]/.test(pw);
+
+            if (pw.length < minLength) return false;
+            if (!hasUpperCase && !hasSpecialChar) return false;
+
+            return true;
+        }
+
+        // 필수 항목 체크
         if (!userId || !password || !passwordConfirm || !name || !bank || !account || !accountName || !withdrawPassword) {
             alert("모든 필수 항목을 입력해주세요.");
             return;
         }
+
+        // 비밀번호 확인
         if (password !== passwordConfirm) {
             alert("비밀번호가 일치하지 않습니다.");
             return;
         }
-        if (password.length < 6) {
-            alert("비밀번호는 6자 이상이어야 합니다.");
+
+        // 비밀번호 최소 길이 및 정책 체크
+        if (!isValidPassword(password)) {
+            alert("비밀번호는 최소 8자 이상이며, 대문자와 특수문자를 포함해야 합니다.");
             return;
         }
-        // 여기서 출금 비밀번호를 해시!
-        const hashedWithdrawPassword = bcrypt.hashSync(withdrawPassword, 10);
+
+        // bcrypt 라이브러리 로드 확인 (없으면 에러 메시지)
+        if (!bcrypt || typeof bcrypt.hashSync !== "function") {
+            alert("암호화 라이브러리가 로딩되지 않았습니다. 잠시 후 새로고침 후 다시 시도하세요.");
+            return;
+        }
+
+        // 출금 비밀번호 해시 처리
+        let hashedWithdrawPassword;
+        try {
+            hashedWithdrawPassword = bcrypt.hashSync(withdrawPassword, 10);
+        } catch (err) {
+            console.error("bcrypt 해시 처리 오류:", err);
+            alert("암호화 처리 중 오류가 발생했습니다.");
+            return;
+        }
 
         showLoading();
+
         try {
-            // 1) Firebase Auth 회원가입 (로그인 비번은 자동 해시 저장됨)
+            // 1) Firebase Auth에 사용자 생성 (이메일은 userId@yourdomain.com 형식)
             const userCredential = await auth.createUserWithEmailAndPassword(`${userId}@yourdomain.com`, password);
+
+            // 2) 로그아웃 (자동 로그인 방지)
             await auth.signOut();
 
-            // 2) Firestore 저장
+            // 3) Firestore users 컬렉션에 사용자 데이터 저장
             const userData = {
                 userId,
                 name,
@@ -2023,12 +2035,13 @@ function setupRegister() {
                 balance: 0,
                 point: 0,
                 joinDate: new Date().toISOString(),
-                status: "pending",
+                status: "pending", // 관리자 승인 대기 상태
                 isAdmin: false,
-                withdrawPassword: hashedWithdrawPassword, // 이 부분이 핵심!
+                withdrawPassword: hashedWithdrawPassword, // 해시된 출금 비밀번호 저장
                 lastLoginIp: null,
                 lastLoginAt: null,
             };
+
             await db.collection("users").doc(userCredential.user.uid).set(userData);
 
             alert("회원가입 신청이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다.");
