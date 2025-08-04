@@ -1047,6 +1047,7 @@ async function loadChargeRequests() {
 }
 
 /* 충전 요청 승인 */
+// 충전 승인
 async function approveChargeRequest(e) {
     const requestId = e.target.dataset.requestid;
     const userId = e.target.dataset.userid;
@@ -1078,12 +1079,41 @@ async function approveChargeRequest(e) {
         });
 
         alert("충전이 승인되었습니다.");
-        loadUserData(); // 페이지 새로고침
     } catch (error) {
         console.error("충전 승인 오류:", error);
         alert("충전 승인 중 오류가 발생했습니다: " + error.message);
     } finally {
         hideLoading();
+        loadChargeRequests(); // ★ 목록 즉시 갱신!
+    }
+}
+
+// 충전 거절
+async function rejectChargeRequest(e) {
+    const requestId = e.target.dataset.requestid;
+    const reason = prompt("거절 사유를 입력해주세요:", "정보 불일치");
+
+    if (!reason) return;
+
+    if (!confirm(`이 충전 신청을 거절하시겠습니까? 사유: ${reason}`)) {
+        return;
+    }
+
+    showLoading();
+    try {
+        await db.collection("chargeRequests").doc(requestId).update({
+            status: "rejected",
+            processedDate: new Date().toISOString(),
+            adminNote: reason,
+        });
+
+        alert("충전 신청이 거절되었습니다.");
+    } catch (error) {
+        console.error("충전 거절 오류:", error);
+        alert("충전 거절 중 오류가 발생했습니다: " + error.message);
+    } finally {
+        hideLoading();
+        loadChargeRequests(); // ★ 목록 즉시 갱신!
     }
 }
 
@@ -1315,6 +1345,7 @@ async function loadExchangeRequests() {
 }
 
 // 환전 요청 완료 처리
+// 환전 완료
 async function completeExchangeRequest(e) {
     const requestId = e.target.dataset.requestid;
     const userId = e.target.dataset.userid;
@@ -1333,12 +1364,59 @@ async function completeExchangeRequest(e) {
         });
 
         alert("환전이 완료 처리되었습니다.");
-        loadExchangeRequests();
     } catch (error) {
         console.error("환전 완료 처리 오류:", error);
         alert("환전 완료 처리 중 오류가 발생했습니다: " + error.message);
     } finally {
         hideLoading();
+        loadExchangeRequests(); // ★ 목록 즉시 갱신!
+    }
+}
+
+// 환전 거절
+async function rejectExchangeRequest(e) {
+    const requestId = e.target.dataset.requestid;
+    const reason = prompt("거절 사유를 입력해주세요:", "정보 불일치");
+
+    if (!reason) return;
+
+    if (!confirm(`이 환전 신청을 거절하시겠습니까? 사유: ${reason}`)) {
+        return;
+    }
+
+    showLoading();
+    try {
+        // 1. 환전 요청 상태 업데이트
+        const requestDoc = await db.collection("exchangeRequests").doc(requestId).get();
+        const requestData = requestDoc.data();
+
+        await db.runTransaction(async (transaction) => {
+            // 2. 사용자 잔액 환급
+            const userRef = db.collection("users").doc(requestData.userId);
+            const userDoc = await transaction.get(userRef);
+
+            if (userDoc.exists) {
+                const currentBalance = userDoc.data().balance || 0;
+                transaction.update(userRef, {
+                    balance: currentBalance + requestData.amount,
+                });
+            }
+
+            // 3. 환전 요청 상태 업데이트
+            transaction.update(db.collection("exchangeRequests").doc(requestId), {
+                status: "rejected",
+                processedDate: new Date().toISOString(),
+                adminNote: reason,
+            });
+        });
+
+        alert("환전 신청이 거절되었습니다.");
+    } catch (error) {
+        console.error("환전 거절 오류:", error);
+        alert("환전 거절 중 오류가 발생했습니다: " + error.message);
+    } finally {
+        hideLoading();
+        loadExchangeRequests(); // ★ 목록 즉시 갱신!
     }
 }
 
@@ -1430,7 +1508,7 @@ function setupExchangeSubmit() {
             const userDoc = await db.collection("users").doc(user.uid).get();
             if (!userDoc.exists) throw new Error("사용자 정보를 찾을 수 없습니다");
 
-            // **bcrypt 체크 추가**
+            // bcrypt 체크
             if (!bcrypt || typeof bcrypt.compareSync !== "function") {
                 alert("암호화 라이브러리가 로딩되지 않았습니다. 새로고침 후 다시 시도하세요.");
                 return;
@@ -1464,10 +1542,14 @@ function setupExchangeSubmit() {
             });
 
             showExchangeSuccessNotification(amountNum);
+
+            // ★ 환전 모달 닫고, 잔액 즉시 갱신 ★
+            closeModal("exchangeModal");
+            updateUserBalanceDisplay(); // ← 바로 이 라인이 핵심!!
+
             document.getElementById("customExchangeAmount").value = "";
             document.querySelectorAll(".amount-btn").forEach((b) => b.classList.remove("active"));
             document.getElementById("exchangePassword").value = "";
-            updateUserBalanceDisplay();
             loadExchangeHistory();
         } catch (error) {
             console.error("환전 신청 오류:", error);
@@ -1812,6 +1894,7 @@ async function viewUserInfoByUid(uid) {
     }
 }
 
+// 가입 승인
 async function approveUserRegistration(e) {
     const requestId = e.target.dataset.requestid;
     const userId = e.target.dataset.userid;
@@ -1819,7 +1902,6 @@ async function approveUserRegistration(e) {
     if (!confirm("이 사용자의 가입을 승인하시겠습니까?")) return;
 
     showLoading();
-
     try {
         // 1. 승인 요청 문서 업데이트
         await db.collection("approvalRequests").doc(requestId).update({
@@ -1835,12 +1917,50 @@ async function approveUserRegistration(e) {
         });
 
         alert("사용자 가입이 승인되었습니다.");
-        loadPendingApprovals();
     } catch (error) {
         console.error("가입 승인 오류:", error);
         alert("승인 실패: " + error.message);
     } finally {
         hideLoading();
+        loadPendingApprovals(); // ★ 가입승인 목록 즉시 갱신!
+        loadUserData(); // ★ 회원통계/회원관리 목록도 갱신!
+    }
+}
+
+// 가입 거절
+async function rejectUserRegistration(e) {
+    const requestId = e.target.dataset.requestid;
+    const userId = e.target.dataset.userid;
+    const reason = prompt("거절 사유를 입력해주세요 (사용자 계정이 완전히 삭제됩니다):", "정보 불충분");
+
+    if (!reason) return;
+
+    if (!confirm(`이 사용자의 가입을 완전히 거절하시겠습니까?\n\n사유: ${reason}\n\n※ 주의: 이 작업은 되돌릴 수 없으며 모든 사용자 데이터가 삭제됩니다.`)) {
+        return;
+    }
+
+    showLoading();
+    try {
+        await db.runTransaction(async (transaction) => {
+            // 1. 승인 요청 문서 삭제
+            const requestRef = db.collection("approvalRequests").doc(requestId);
+            transaction.delete(requestRef);
+
+            // 2. 사용자 문서 삭제
+            const userRef = db.collection("users").doc(userId);
+            transaction.delete(userRef);
+
+            // 3. Firebase Auth 삭제는 서버에서 따로 처리 필요
+        });
+
+        alert("사용자 가입이 완전히 거절되었습니다. 모든 데이터가 삭제되었습니다.");
+    } catch (error) {
+        console.error("가입 거절 오류:", error);
+        alert(`가입 거절 중 오류가 발생했습니다: ${error.message}\n\n자세한 내용은 콘솔을 확인해주세요.`);
+    } finally {
+        hideLoading();
+        loadPendingApprovals(); // ★ 가입승인 목록 즉시 갱신!
+        loadUserData(); // ★ 회원통계/회원관리 목록도 갱신!
     }
 }
 
