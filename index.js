@@ -1972,7 +1972,7 @@ function setupRegister() {
             return;
         }
 
-        // **bcrypt 체크 추가**
+        // bcrypt 체크
         if (!bcrypt || typeof bcrypt.hashSync !== "function") {
             alert("암호화 라이브러리가 로딩되지 않았습니다. 잠시 후 새로고침 후 다시 시도하세요.");
             return;
@@ -1989,9 +1989,10 @@ function setupRegister() {
 
         showLoading();
         try {
+            // 1) 회원 등록(Firebase Auth)
             const userCredential = await auth.createUserWithEmailAndPassword(`${userId}@yourdomain.com`, password);
-            await auth.signOut();
 
+            // 2) Firestore에 정보 저장
             const userData = {
                 userId,
                 name,
@@ -2007,11 +2008,19 @@ function setupRegister() {
                 lastLoginIp: null,
                 lastLoginAt: null,
             };
-
             await db.collection("users").doc(userCredential.user.uid).set(userData);
 
-            alert("회원가입 신청이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다.");
+            // 3) 로그아웃 처리 (꼭 Firestore 저장 이후에!)
+            await auth.signOut();
+
+            // 4) UI/상태 리셋 (메인화면, 비로그인 UI로)
+            updateAuthUI(null);
+            showMainPage();
             closeModal("registerModal");
+
+            // 5) 승인대기 안내 (팝업)
+            showBlockedPopup("회원가입 신청이 완료되었습니다.<br>관리자 승인 후 로그인이 가능합니다.");
+
         } catch (error) {
             console.error("회원가입 오류:", error);
             alert("회원가입 중 오류가 발생했습니다: " + error.message);
