@@ -7,11 +7,11 @@
             http-equiv="Content-Security-Policy"
             content="
         default-src 'self';
-        connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://ipapi.co;
+        connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://ipapi.co https://api.ipify.org https://cdn.livechatinc.com;
         img-src *;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
         font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
-        script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.livechatinc.com https://api.livechatinc.com https://apis.google.com;
+        script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.livechatinc.com https://api.livechatinc.com https://apis.google.com https://cdn.jsdelivr.net;
         frame-src 'self' https://cloud-casino-34cc6.firebaseapp.com https://accounts.google.com https://apis.google.com https://secure.livechatinc.com;
       "
         />
@@ -32,8 +32,8 @@
         <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
 
         <!-- 메인 JS -->
+        <script src="https://cdn.jsdelivr.net/npm/bcryptjs@3.0/umd/index.min.js" defer></script>
         <script src="index.js" defer></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
     </head>
     <body>
         <!-- Aurora 배경 필름 -->
