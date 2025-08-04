@@ -341,6 +341,11 @@ function validatePassword(password) {
         alert("출금 비밀번호를 입력해주세요.");
         return false;
     }
+    // bcrypt 체크
+    if (!bcrypt || typeof bcrypt.compareSync !== "function") {
+        alert("암호화 라이브러리가 로딩되지 않았습니다. 새로고침 후 다시 시도하세요.");
+        return false;
+    }
     return true;
 }
 
@@ -361,6 +366,12 @@ async function processCharge(amount, pointOption, password) {
 
         const userDoc = await db.collection("users").doc(user.uid).get();
         if (!userDoc.exists) throw new Error("사용자 정보를 찾을 수 없습니다");
+
+        // **bcrypt 체크 추가**
+        if (!bcrypt || typeof bcrypt.compareSync !== "function") {
+            alert("암호화 라이브러리가 로딩되지 않았습니다. 새로고침 후 다시 시도하세요.");
+            return;
+        }
         if (!bcrypt.compareSync(password, userDoc.data().withdrawPassword)) {
             throw new Error("출금 비밀번호가 일치하지 않습니다");
         }
@@ -511,43 +522,23 @@ function setupNavItems() {
 
 /* Copy */
 function setupCopyButton() {
-    const copyBtn = document.querySelector(".copy-btn");
-    if (copyBtn) {
-        copyBtn.addEventListener("click", function () {
-            const accountInfo = "농협 352-837-294** / 예금주: 구름몰";
-            navigator.clipboard
-                .writeText(accountInfo)
-                .then(() => {
-                    const originalText = this.textContent;
-                    this.textContent = "복사됨!";
-                    this.style.backgroundColor = "var(--accent-green)";
-                    setTimeout(() => {
-                        this.textContent = originalText;
-                        this.style.backgroundColor = "var(--neon-blue)";
-                    }, 2000);
-                })
-                .catch((err) => {
-                    console.error("복사 실패:", err);
-                    const textarea = document.createElement("textarea");
-                    textarea.value = accountInfo;
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    try {
-                        document.execCommand("copy");
-                        const originalText = this.textContent;
-                        this.textContent = "복사됨!";
-                        this.style.backgroundColor = "var(--accent-green)";
-                        setTimeout(() => {
-                            this.textContent = originalText;
-                            this.style.backgroundColor = "var(--neon-blue)";
-                        }, 2000);
-                    } catch (err) {
-                        console.error("대체 복사 방법 실패:", err);
-                    }
-                    document.body.removeChild(textarea);
-                });
+    // 실제 복사 대상 버튼은 verifyAccountBtn
+    const copyBtn = document.getElementById("verifyAccountBtn");
+    if (!copyBtn) return;
+
+    copyBtn.addEventListener("click", function () {
+        if (!window.isAccountVerified) return; // 계좌 인증 후에만 복사 가능
+        if (!currentDepositAccount) return alert("계좌 정보를 불러오는 중입니다");
+        navigator.clipboard.writeText(currentDepositAccount).then(() => {
+            const o = copyBtn.textContent;
+            copyBtn.textContent = "복사됨!";
+            copyBtn.style.backgroundColor = "var(--accent-green)";
+            setTimeout(() => {
+                copyBtn.textContent = o;
+                copyBtn.style.backgroundColor = "var(--neon-blue)";
+            }, 2000);
         });
-    }
+    });
 }
 
 /* 2. 충전 페이지 계좌 발급 로직 */
@@ -773,22 +764,22 @@ async function renderUserTable(users) {
         if (user.status === "banned") row.style.opacity = "0.6";
         if (user.isAdmin) row.style.backgroundColor = "rgba(0,170,255,.1)";
 
+        // **onchange 속성 제거**
         row.innerHTML = `
             <td>${esc(user.name) || ""} ${user.isAdmin ? "(관리자)" : ""}</td>
             <td>${esc(user.userId) || ""}</td>
+            <td>${user.ipAddress || ""}</td>
             <td>
                 <input type="number" class="balance-input"
                        value="${user.balance || 0}"
                        data-userid="${user.id}"
-                       data-type="balance"
-                       onchange="updateUserBalance('${user.id}', this.value)">
+                       data-type="balance">
             </td>
             <td>
                 <input type="number" class="balance-input"
                        value="${user.point || 0}"
                        data-userid="${user.id}"
-                       data-type="point"
-                       onchange="updateUserBalance('${user.id}', this.value, 'point')">
+                       data-type="point">
             </td>
             <td>${user.joinDate || ""}</td>
             <td>
@@ -814,6 +805,13 @@ async function renderUserTable(users) {
             </td>
         `;
         tableBody.appendChild(row);
+
+        // **여기서 balance/point 입력값에 change 이벤트 바인딩**
+        row.querySelectorAll(".balance-input").forEach((input) => {
+            input.addEventListener("change", function () {
+                updateUserBalance(user.id, this.value, this.dataset.type);
+            });
+        });
     });
 
     // 상태 변경
@@ -914,15 +912,6 @@ async function detectAndBlockVpn(ipAddress) {
 // Helper 함수들
 function getUserIdFromUid(uid) {
     return "user_" + uid.substring(0, 5);
-}
-
-function getPointOptionText(optionId) {
-    const options = {
-        option1: "카지노 롤링 100%",
-        option2: "슬롯 첫충 10% 매충 5%",
-        option3: "포인트 미지급",
-    };
-    return options[optionId] || optionId;
 }
 
 function debounce(func, wait) {
@@ -1401,19 +1390,15 @@ async function rejectExchangeRequest(e) {
 }
 
 // 환전 신청 처리
-/* 환전 신청 처리 */
 function setupExchangeSubmit() {
-    // 헬퍼: 문자열에서 숫자만 남기기
     const onlyDigits = (str = "") => str.replace(/[^0-9]/g, "");
 
     document.getElementById("submitExchangeBtn").addEventListener("click", async function () {
-        /* ---------- 1) 금액 추출 ---------- */
         const rawInput = document.getElementById("customExchangeAmount").value;
         const activeBtnText = document.querySelector(".amount-btn.active")?.textContent || "";
         const amountStr = onlyDigits(rawInput) || onlyDigits(activeBtnText);
         const amountNum = parseInt(amountStr, 10);
 
-        /* ---------- 2) 기본 유효성 검사 ---------- */
         if (!amountNum) {
             alert("유효한 금액을 입력해주세요.");
             return;
@@ -1427,7 +1412,6 @@ function setupExchangeSubmit() {
             return;
         }
 
-        /* ---------- 3) 추가 입력값 검사 ---------- */
         const bank = document.getElementById("exchangeBank").value;
         const account = document.getElementById("exchangeAccount").value;
         const accountName = document.getElementById("exchangeAccountName").value;
@@ -1438,7 +1422,6 @@ function setupExchangeSubmit() {
             return;
         }
 
-        /* ---------- 4) 파이어스토어 트랜잭션 ---------- */
         showLoading();
         try {
             const user = auth.currentUser;
@@ -1447,16 +1430,18 @@ function setupExchangeSubmit() {
             const userDoc = await db.collection("users").doc(user.uid).get();
             if (!userDoc.exists) throw new Error("사용자 정보를 찾을 수 없습니다");
 
-            // 출금 비밀번호 확인
+            // **bcrypt 체크 추가**
+            if (!bcrypt || typeof bcrypt.compareSync !== "function") {
+                alert("암호화 라이브러리가 로딩되지 않았습니다. 새로고침 후 다시 시도하세요.");
+                return;
+            }
             if (!bcrypt.compareSync(password, userDoc.data().withdrawPassword)) {
                 throw new Error("출금 비밀번호가 일치하지 않습니다");
             }
 
-            // 잔액 확인
             const currentBalance = userDoc.data().balance || 0;
             if (currentBalance < amountNum) throw new Error("보유금액이 부족합니다");
 
-            // 환전 데이터 객체
             const exchangeData = {
                 userId: user.uid,
                 userName: userDoc.data().name || userDoc.data().userId,
@@ -1470,7 +1455,6 @@ function setupExchangeSubmit() {
                 processedDate: null,
             };
 
-            // 1) 잔액 차감 + 2) 환전 요청 등록
             await db.runTransaction(async (tx) => {
                 tx.update(db.collection("users").doc(user.uid), {
                     balance: currentBalance - amountNum,
@@ -1479,7 +1463,6 @@ function setupExchangeSubmit() {
                 tx.set(exchangeRef, exchangeData);
             });
 
-            /* ---------- 5) 성공 후 UI 초기화 ---------- */
             showExchangeSuccessNotification(amountNum);
             document.getElementById("customExchangeAmount").value = "";
             document.querySelectorAll(".amount-btn").forEach((b) => b.classList.remove("active"));
@@ -1903,7 +1886,7 @@ async function rejectUserRegistration(e) {
 }
 
 // 기존 코드에 추가할 터치 이벤트 핸들러
-function setupMobileTouchEvents() {
+/* function setupMobileTouchEvents() {
     // 탭 메뉴 터치 영역 확대
     document.querySelectorAll(".admin-tab").forEach((tab) => {
         tab.style.minWidth = "80px";
@@ -1926,7 +1909,7 @@ function setupMobileTouchEvents() {
             this.style.backgroundColor = "";
         });
     });
-}
+} */
 
 // 출금 비밀번호 확인 함수(예시)
 async function checkWithdrawPassword(inputPassword) {
@@ -1941,24 +1924,22 @@ async function checkWithdrawPassword(inputPassword) {
         return false;
     }
     const savedHash = userDoc.data().withdrawPassword;
-    // bcrypt로 비교!
+    // **bcrypt 체크 추가**
+    if (!bcrypt || typeof bcrypt.compareSync !== "function") {
+        alert("암호화 라이브러리가 로딩되지 않았습니다. 새로고침 후 다시 시도하세요.");
+        return false;
+    }
     const isMatch = bcrypt.compareSync(inputPassword, savedHash);
     if (!isMatch) {
         alert("출금 비밀번호가 일치하지 않습니다");
         return false;
     }
-    // 맞으면 true
     return true;
 }
 
 // 1) setupRegister(): 회원가입 시점에 IP 조회 → VPN 검사 → Firestore에 저장
 function setupRegister() {
-    // 회원가입 버튼 클릭 이벤트 등록
     document.getElementById("registerSubmit").addEventListener("click", async function () {
-        // 디버깅용 로그
-        console.log("회원가입 버튼 클릭 시점 bcrypt 객체:", bcrypt);
-        console.log("bcrypt.hashSync 타입:", typeof bcrypt?.hashSync);
-
         // 입력값 받기
         const userId = document.getElementById("regId").value.trim();
         const password = document.getElementById("regPassword").value.trim();
@@ -1969,44 +1950,34 @@ function setupRegister() {
         const accountName = document.getElementById("regAccountName").value.trim();
         const withdrawPassword = document.getElementById("withdrawPassword").value.trim();
 
-        // 비밀번호 유효성 검사 함수
         function isValidPassword(pw) {
             const minLength = 8;
-            // 예: 대문자 또는 특수문자 중 하나만 있어도 통과
             const hasUpperCase = /[A-Z]/.test(pw);
             const hasSpecialChar = /[^A-Za-z0-9]/.test(pw);
-
             if (pw.length < minLength) return false;
             if (!hasUpperCase && !hasSpecialChar) return false;
-
             return true;
         }
 
-        // 필수 항목 체크
         if (!userId || !password || !passwordConfirm || !name || !bank || !account || !accountName || !withdrawPassword) {
             alert("모든 필수 항목을 입력해주세요.");
             return;
         }
-
-        // 비밀번호 확인
         if (password !== passwordConfirm) {
             alert("비밀번호가 일치하지 않습니다.");
             return;
         }
-
-        // 비밀번호 최소 길이 및 정책 체크
         if (!isValidPassword(password)) {
             alert("비밀번호는 최소 8자 이상이며, 대문자와 특수문자를 포함해야 합니다.");
             return;
         }
 
-        // bcrypt 라이브러리 로드 확인 (없으면 에러 메시지)
+        // **bcrypt 체크 추가**
         if (!bcrypt || typeof bcrypt.hashSync !== "function") {
             alert("암호화 라이브러리가 로딩되지 않았습니다. 잠시 후 새로고침 후 다시 시도하세요.");
             return;
         }
 
-        // 출금 비밀번호 해시 처리
         let hashedWithdrawPassword;
         try {
             hashedWithdrawPassword = bcrypt.hashSync(withdrawPassword, 10);
@@ -2017,15 +1988,10 @@ function setupRegister() {
         }
 
         showLoading();
-
         try {
-            // 1) Firebase Auth에 사용자 생성 (이메일은 userId@yourdomain.com 형식)
             const userCredential = await auth.createUserWithEmailAndPassword(`${userId}@yourdomain.com`, password);
-
-            // 2) 로그아웃 (자동 로그인 방지)
             await auth.signOut();
 
-            // 3) Firestore users 컬렉션에 사용자 데이터 저장
             const userData = {
                 userId,
                 name,
@@ -2035,9 +2001,9 @@ function setupRegister() {
                 balance: 0,
                 point: 0,
                 joinDate: new Date().toISOString(),
-                status: "pending", // 관리자 승인 대기 상태
+                status: "pending",
                 isAdmin: false,
-                withdrawPassword: hashedWithdrawPassword, // 해시된 출금 비밀번호 저장
+                withdrawPassword: hashedWithdrawPassword,
                 lastLoginIp: null,
                 lastLoginAt: null,
             };
@@ -2057,49 +2023,58 @@ function setupRegister() {
 
 function updateAuthUI(user) {
     const authButtons = document.querySelector(".auth-buttons");
-
     if (user) {
         if (user.isAdmin) {
             authButtons.innerHTML = `
-                    <button class="auth-btn" id="adminBtn">관리자 페이지</button>
-                    <button class="auth-btn" id="logoutBtn">로그아웃</button>
-                `;
-
-            document.getElementById("adminBtn")?.addEventListener("click", function () {
+                <button class="auth-btn" id="adminBtn">관리자 페이지</button>
+                <button class="auth-btn" id="logoutBtn">로그아웃</button>
+            `;
+            // 동적 버튼 이벤트 반드시 재등록
+            document.getElementById("adminBtn").addEventListener("click", function () {
                 showAdminPage();
-                loadPendingApprovals(); // 승인 대기 목록 로드 추가
+                loadPendingApprovals();
+            });
+            document.getElementById("logoutBtn").addEventListener("click", async () => {
+                try {
+                    await auth.signOut();
+                    isLoggedIn = false;
+                    updateAuthUI(null);
+                    showMainPage();
+                    alert("로그아웃 되었습니다.");
+                } catch (error) {
+                    console.error("로그아웃 오류:", error);
+                    alert("로그아웃 중 오류가 발생했습니다.");
+                }
             });
         } else {
             authButtons.innerHTML = `
-                    <div class="user-info">
-                        <span>${user.userId || user.name || "사용자"}님</span>
-                        <div class="user-balance">
-                            보유금액: <span>${user.balance ? user.balance.toLocaleString() : 0}원</span> | 
-                            포인트: <span>${user.point ? user.point.toLocaleString() : 0}P</span>
-                        </div>
+                <div class="user-info">
+                    <span>${user.userId || user.name || "사용자"}님</span>
+                    <div class="user-balance">
+                        보유금액: <span>${user.balance ? user.balance.toLocaleString() : 0}원</span> | 
+                        포인트: <span>${user.point ? user.point.toLocaleString() : 0}P</span>
                     </div>
-                    <button class="auth-btn" id="logoutBtn">로그아웃</button>
-                `;
+                </div>
+                <button class="auth-btn" id="logoutBtn">로그아웃</button>
+            `;
+            document.getElementById("logoutBtn").addEventListener("click", async () => {
+                try {
+                    await auth.signOut();
+                    isLoggedIn = false;
+                    updateAuthUI(null);
+                    showMainPage();
+                    alert("로그아웃 되었습니다.");
+                } catch (error) {
+                    console.error("로그아웃 오류:", error);
+                    alert("로그아웃 중 오류가 발생했습니다.");
+                }
+            });
         }
-
-        document.getElementById("logoutBtn").addEventListener("click", async () => {
-            try {
-                await auth.signOut();
-                isLoggedIn = false;
-                updateAuthUI(null);
-                showMainPage();
-                alert("로그아웃 되었습니다.");
-            } catch (error) {
-                console.error("로그아웃 오류:", error);
-                alert("로그아웃 중 오류가 발생했습니다.");
-            }
-        });
     } else {
         authButtons.innerHTML = `
-                <button class="auth-btn" id="loginBtn">로그인</button>
-                <button class="auth-btn" id="registerBtn">회원가입</button>
-            `;
-
+            <button class="auth-btn" id="loginBtn">로그인</button>
+            <button class="auth-btn" id="registerBtn">회원가입</button>
+        `;
         document.getElementById("loginBtn").addEventListener("click", () => openModal("loginModal"));
         document.getElementById("registerBtn").addEventListener("click", () => openModal("registerModal"));
     }
@@ -2636,10 +2611,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.getElementById("exchangeBtn").addEventListener("click", function () {
         updateUserBalanceDisplay();
-    });
-
-    document.getElementById("userSearch").addEventListener("input", function () {
-        loadUserData();
     });
 
     document.getElementById("saveDepositAccountBtn").addEventListener("click", () => {
